@@ -1,4 +1,4 @@
-"""API CRUD de productos — Parcial 2 de Sistemas Distribuidos.
+"""API CRUD de productos, Parcial 2 de Sistemas Distribuidos.
 
 Corre como un Deployment de 2 réplicas detrás de un Service LoadBalancer y
 guarda los datos en PostgreSQL (otro Deployment con un volumen persistente).

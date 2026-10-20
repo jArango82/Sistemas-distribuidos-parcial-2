@@ -1,4 +1,4 @@
-# ⚠️ EJEMPLO DEL PUNTO 4 — NO SE APLICA EN EL DESPLIEGUE.
+# Ejemplo del punto 4. NO se aplica en el despliegue.
 #
 # Esqueleto de PostgreSQL con StatefulSet. Muestra las piezas de Kubernetes
 # necesarias para tener réplicas; la replicación en sí (pg_basebackup,

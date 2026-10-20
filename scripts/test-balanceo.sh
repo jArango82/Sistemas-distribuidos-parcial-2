@@ -15,12 +15,12 @@ NS="parcial2"
 
 if [[ $# -ge 1 ]]; then
   URL="${1%/}"
-  echo "🔁 $N peticiones a $URL/api/info desde esta máquina..."
+  echo "Enviando $N peticiones a $URL/api/info desde esta máquina..."
   RESULTADO="$(for _ in $(seq 1 "$N"); do
     curl -sS -o /dev/null -D - "$URL/api/info" | grep -i '^x-served-by:' | awk '{print $2}' | tr -d '\r'
   done)"
 else
-  echo "🔁 $N peticiones a http://api-crud-lb/api/info desde un pod dentro del clúster..."
+  echo "Enviando $N peticiones a http://api-crud-lb/api/info desde un pod dentro del clúster..."
   RESULTADO="$(kubectl -n "$NS" run "balanceo-$RANDOM" --rm -i --quiet --restart=Never \
     --image=curlimages/curl:8.10.1 --command -- sh -c \
     "for i in \$(seq 1 $N); do curl -s -o /dev/null -D - http://api-crud-lb/api/info | grep -i '^x-served-by:' | awk '{print \$2}' | tr -d '\r'; done")"
@@ -32,8 +32,8 @@ sort <<<"$RESULTADO" | uniq -c | sort -rn
 PODS="$(sort -u <<<"$RESULTADO" | grep -c .)"
 echo
 if [[ "$PODS" -ge 2 ]]; then
-  echo "✅ El Service repartió la carga entre $PODS pods."
+  echo "OK: el Service repartió la carga entre $PODS pods."
 else
-  echo "❌ Todas las peticiones llegaron a un solo pod. ¿Están las 2 réplicas Ready?"
+  echo "ERROR: todas las peticiones llegaron a un solo pod. Revisar que las 2 réplicas estén Ready."
   exit 1
 fi

@@ -1,4 +1,4 @@
-# ⚠️ EJEMPLO DEL PUNTO 4 — NO SE APLICA EN EL DESPLIEGUE.
+# Ejemplo del punto 4. NO se aplica en el despliegue.
 #
 # Opción recomendada: el operator CloudNativePG (https://cloudnative-pg.io).
 # Requiere instalar antes el operator en el clúster (ver su documentación).

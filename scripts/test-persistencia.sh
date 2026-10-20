@@ -13,23 +13,23 @@ pod_bbdd() { kubectl -n "$NS" get pod -l app=postgres -o jsonpath='{.items[0].me
 psql_en() { kubectl -n "$NS" exec "$1" -- sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tA -c \"$2\""; }
 
 POD_VIEJO="$(pod_bbdd)"
-echo "1️⃣  Pod actual de la BBDD: $POD_VIEJO"
+echo "[1/3] Pod actual de la BBDD: $POD_VIEJO"
 psql_en "$POD_VIEJO" "INSERT INTO productos (nombre, precio, stock, creado_por) VALUES ('$MARCA', 1, 1, 'test-persistencia');" >/dev/null
-echo "    Insertado el producto '$MARCA'"
+echo "      Insertado el producto '$MARCA'"
 
-echo "2️⃣  Eliminando el pod $POD_VIEJO ..."
+echo "[2/3] Eliminando el pod $POD_VIEJO ..."
 kubectl -n "$NS" delete pod "$POD_VIEJO" --wait=true
 kubectl -n "$NS" rollout status deployment/postgres --timeout=180s
 kubectl -n "$NS" wait --for=condition=Ready pod -l app=postgres --timeout=180s
 POD_NUEVO="$(pod_bbdd)"
-echo "    Pod nuevo de la BBDD: $POD_NUEVO"
+echo "      Pod nuevo de la BBDD: $POD_NUEVO"
 
-echo "3️⃣  Buscando el producto en el pod nuevo..."
+echo "[3/3] Buscando el producto en el pod nuevo..."
 ENCONTRADO="$(psql_en "$POD_NUEVO" "SELECT nombre FROM productos WHERE nombre = '$MARCA';")"
 if [[ "$ENCONTRADO" == "$MARCA" ]]; then
-  echo "✅ El dato sobrevivió a la muerte del pod: el volumen funciona."
+  echo "OK: el dato sigue ahí después de borrar el pod, el volumen funciona."
   psql_en "$POD_NUEVO" "DELETE FROM productos WHERE nombre = '$MARCA';" >/dev/null
 else
-  echo "❌ No se encontró el dato: revisa el PV/PVC."
+  echo "ERROR: no se encontró el dato, revisar el PV y el PVC."
   exit 1
 fi

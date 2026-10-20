@@ -7,4 +7,4 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 kubectl delete -f "$ROOT/k8s/" --ignore-not-found
-echo "🧹 Recursos eliminados."
+echo "Recursos eliminados."

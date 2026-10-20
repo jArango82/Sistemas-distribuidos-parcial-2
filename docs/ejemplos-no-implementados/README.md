@@ -1,8 +1,8 @@
-# ⚠️ Ejemplos NO implementados
+# Ejemplos no implementados
 
 Estos archivos acompañan la investigación del **punto 4**
 ([`../punto-4-replicas-y-balanceo-bbdd.md`](../punto-4-replicas-y-balanceo-bbdd.md)).
-El enunciado pide **solo investigar**, así que **no forman parte del despliegue**:
+El enunciado pide solo investigar, así que no forman parte del despliegue:
 `scripts/deploy.sh` y `kubectl apply -f k8s/` nunca los aplican.
 
 | Archivo | Qué ilustra |

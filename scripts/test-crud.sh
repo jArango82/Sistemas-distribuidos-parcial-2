@@ -28,10 +28,10 @@ req() {
   rm -f "$headers"
   printf '\n\033[1m%-6s %s\033[0m → HTTP %s  (pod: %s)\n' "$method" "$path" "$code" "${pod:-?}"
   if [[ -n "$BODY" ]]; then pretty "$BODY"; fi
-  [[ "$code" == "${4:-2}"* ]] || { echo "❌ Se esperaba HTTP ${4:-2xx} y llegó $code"; exit 1; }
+  [[ "$code" == "${4:-2}"* ]] || { echo "ERROR: se esperaba HTTP ${4:-2xx} y llegó $code"; exit 1; }
 }
 
-echo "🔎 Probando la API en $URL"
+echo "Probando la API en $URL"
 req GET  /api/info
 req POST /api/productos '{"nombre":"Teclado mecánico","descripcion":"Switches rojos","precio":189900,"stock":10}'
 ID="$(campo id <<<"$BODY")"
@@ -43,4 +43,4 @@ req DELETE "/api/productos/$ID"
 req GET   "/api/productos/$ID" "" 404
 
 echo
-echo "✅ CRUD completo OK (Create, Read, Update, Delete)"
+echo "OK: create, read, update y delete funcionan."

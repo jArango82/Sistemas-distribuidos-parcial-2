@@ -1,189 +1,99 @@
-<div align="center">
-
-# ☸️ Sistemas Distribuidos · Parcial 2
-
-**API CRUD desplegada en Kubernetes con balanceador de carga, PostgreSQL y volumen persistente**
+# Sistemas Distribuidos - Parcial 2
 
 [![CI](https://github.com/jArango82/Sistemas-distribuidos-parcial-2/actions/workflows/ci.yml/badge.svg)](https://github.com/jArango82/Sistemas-distribuidos-parcial-2/actions/workflows/ci.yml)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
-Parcial 2 · 20 % · 20 de octubre · En parejas
+API CRUD de productos desplegada en Kubernetes. La API corre con 2 réplicas detrás de un Service tipo LoadBalancer y guarda los datos en PostgreSQL, que a su vez usa un volumen persistente para no perder la información cuando el pod se reinicia.
 
-</div>
+Parcial 2 (20%) - 20 de octubre - en parejas.
 
----
+## Enunciado
 
-## 📑 Contenido
+![Enunciado](docs/enunciado.png)
 
-1. [El enunciado](#-el-enunciado)
-2. [Cómo se cumple cada punto](#-cómo-se-cumple-cada-punto)
-3. [Arquitectura](#️-arquitectura)
-4. [Estructura del repositorio](#-estructura-del-repositorio)
-5. [Requisitos](#-requisitos)
-6. [**Paso a paso: desplegar y probar**](#-paso-a-paso-desplegar-y-probar) ← empieza aquí
-7. [Endpoints de la API](#-endpoints-de-la-api)
-8. [Explicación de cada manifiesto](#-explicación-de-cada-manifiesto)
-9. [Punto 4: réplicas y balanceo de la BBDD](#-punto-4-réplicas-y-balanceo-de-la-bbdd)
-10. [Guion para la sustentación](#-guion-para-la-sustentación-5-minutos)
-11. [Preguntas que puede hacer el profe](#-preguntas-que-puede-hacer-el-profe)
-12. [Solución de problemas](#-solución-de-problemas)
-13. [Pruebas automáticas (CI)](#-pruebas-automáticas-ci)
-14. [Integrantes](#-integrantes)
+| Punto | Descripción | Valor |
+|---|---|---|
+| 1 | Construir una API en cualquier lenguaje con un CRUD y desplegarla | 1.0 |
+| 2 | Crear un Deployment para la BBDD | 1.0 |
+| 3 | Crear un Volumen para la BBDD | 1.5 |
+| 4 | Investigar cómo tener varias réplicas de la BBDD y cómo balancear esa carga (sin implementarlo) | 1.5 |
 
----
+## Qué hicimos en cada punto
 
-## 📋 El enunciado
+1. **API CRUD.** La hicimos en Python con FastAPI y SQLAlchemy ([`api/`](api/)). Se despliega con un Deployment de 2 réplicas ([`k8s/20-api-deployment.yaml`](k8s/20-api-deployment.yaml)) y se expone con un Service tipo LoadBalancer ([`k8s/21-api-service.yaml`](k8s/21-api-service.yaml)), que es el load balancer del diagrama.
+2. **Deployment de la BBDD.** PostgreSQL 16 con 1 réplica ([`k8s/12-postgres-deployment.yaml`](k8s/12-postgres-deployment.yaml)) y un Service interno para que la API lo encuentre por nombre ([`k8s/13-postgres-service.yaml`](k8s/13-postgres-service.yaml)).
+3. **Volumen.** Un PersistentVolume ([`k8s/10-postgres-pv.yaml`](k8s/10-postgres-pv.yaml)) y un PersistentVolumeClaim ([`k8s/11-postgres-pvc.yaml`](k8s/11-postgres-pvc.yaml)) que se monta en la carpeta de datos de PostgreSQL.
+4. **Investigación.** Está en [`docs/punto-4-replicas-y-balanceo-bbdd.md`](docs/punto-4-replicas-y-balanceo-bbdd.md), con un resumen [al final de este README](#punto-4-réplicas-de-la-bbdd-y-balanceo).
 
-<details>
-<summary>Ver el diagrama original del parcial</summary>
+Además de lo que pedía el enunciado agregamos:
 
-![Enunciado del parcial](docs/enunciado.png)
+- Una página web en `/` para usar el CRUD y ver qué pod respondió cada petición, con un botón para probar el balanceo.
+- La documentación Swagger que genera FastAPI en `/docs`.
+- El header `X-Served-By` en cada respuesta con el nombre del pod. Cada producto también guarda `creado_por` y `actualizado_por`, así se ve que los dos pods escriben en la misma base de datos.
+- Scripts para desplegar y probar todo, y un workflow de GitHub Actions que levanta un clúster de Kubernetes (kind) y corre las pruebas en cada push.
 
-</details>
-
-Hay que montar esta arquitectura dentro de **Kubernetes**:
-
-```
-Actor ──▶ Load Balancer ──▶ Deployment API CRUD ──▶ Deployment BBDD ──▶ Volumen
-                              ├─ POD1                  └─ POD1
-                              └─ POD2
-```
-
-| # | Punto | Valor |
-|:-:|---|:-:|
-| 1 | Construir una **API en cualquier lenguaje con un CRUD** y desplegarla | 1.0 |
-| 2 | Crear un **Deployment para la BBDD** | 1.0 |
-| 3 | Crear un **Volumen para la BBDD** | 1.5 |
-| | *Subtotal implementación* | *3.5* |
-| 4 | **Investigar:** cómo tener varias réplicas de la BBDD y cómo balancear esa carga (**no implementarlo**) | 1.5 |
-| | **Total** | **5.0** |
-
----
-
-## ✅ Cómo se cumple cada punto
-
-| # | Lo que pide | Dónde está | Cómo se demuestra |
-|:-:|---|---|---|
-| 1 | API con CRUD desplegada | [`api/`](api/) (Python + FastAPI) · [`k8s/20-api-deployment.yaml`](k8s/20-api-deployment.yaml) (**2 pods**) · [`k8s/21-api-service.yaml`](k8s/21-api-service.yaml) (**LoadBalancer**) | `./scripts/test-crud.sh` y `./scripts/test-balanceo.sh` |
-| 2 | Deployment de la BBDD | [`k8s/12-postgres-deployment.yaml`](k8s/12-postgres-deployment.yaml) (PostgreSQL 16, **1 pod**) · [`k8s/13-postgres-service.yaml`](k8s/13-postgres-service.yaml) | `kubectl -n parcial2 get deploy postgres` |
-| 3 | Volumen para la BBDD | [`k8s/10-postgres-pv.yaml`](k8s/10-postgres-pv.yaml) (**PersistentVolume**) · [`k8s/11-postgres-pvc.yaml`](k8s/11-postgres-pvc.yaml) (**PersistentVolumeClaim**) | `./scripts/test-persistencia.sh` (mata el pod de la BBDD y los datos siguen ahí) |
-| 4 | Investigación réplicas + balanceo | [`docs/punto-4-replicas-y-balanceo-bbdd.md`](docs/punto-4-replicas-y-balanceo-bbdd.md) · ejemplos en [`docs/ejemplos-no-implementados/`](docs/ejemplos-no-implementados/) | [Resumen más abajo](#-punto-4-réplicas-y-balanceo-de-la-bbdd) |
-
-**Extras** que suman en la sustentación:
-
-- 🖥️ **Interfaz web** en `/` que muestra en vivo **qué pod atendió cada petición** y una prueba de balanceo con gráfica.
-- 📘 **Swagger** automático en `/docs` para probar el CRUD desde el navegador.
-- 🏷️ Cada respuesta trae el header **`X-Served-By`** con el nombre del pod, y cada producto guarda `creado_por` / `actualizado_por` → se ve que **los 2 pods comparten la misma BBDD**.
-- ❤️ **Probes** de liveness, readiness y startup; **initContainer** que espera a PostgreSQL; **Secret** y **ConfigMap**; límites de CPU/memoria; contenedor sin root.
-- 🤖 **CI en GitHub Actions** que levanta un Kubernetes real (kind), despliega todo y prueba CRUD, balanceo y persistencia en cada push.
-
----
-
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```mermaid
 flowchart LR
-    actor((👤 Actor))
+    actor((Actor))
 
-    subgraph K8S["☸️ Kubernetes · namespace parcial2"]
-        LB{{"Service api-crud-lb<br/>type: LoadBalancer<br/>:80"}}
+    subgraph K8S["Kubernetes (namespace parcial2)"]
+        LB{{"Service api-crud-lb<br/>LoadBalancer :80"}}
 
-        subgraph DAPI["Deployment api-crud (replicas: 2)"]
-            P1["POD1<br/>FastAPI :8000"]
-            P2["POD2<br/>FastAPI :8000"]
+        subgraph DAPI["Deployment api-crud"]
+            P1["POD1<br/>FastAPI"]
+            P2["POD2<br/>FastAPI"]
         end
 
-        SVCDB{{"Service postgres<br/>type: ClusterIP<br/>:5432"}}
+        SVCDB{{"Service postgres<br/>ClusterIP :5432"}}
 
-        subgraph DDB["Deployment postgres (replicas: 1)"]
+        subgraph DDB["Deployment postgres"]
             DB1[("POD1<br/>PostgreSQL 16")]
         end
 
-        PVC[/"PVC postgres-pvc<br/>1Gi · RWO"/]
-        PV[("PV postgres-pv<br/>hostPath /data/parcial2-postgres")]
-
-        CM["ConfigMap api-config"]
-        SEC["Secret postgres-secret"]
+        PVC[/"PVC postgres-pvc 1Gi"/]
+        PV[("PV postgres-pv<br/>hostPath")]
     end
 
-    actor -->|HTTP| LB
+    actor --> LB
     LB --> P1 & P2
-    P1 & P2 -->|SQL| SVCDB --> DB1
-    DB1 -->|monta /var/lib/postgresql/data| PVC -->|Bound| PV
-    CM -.-> P1 & P2
-    SEC -.-> P1 & P2 & DB1
+    P1 & P2 --> SVCDB --> DB1
+    DB1 --> PVC --> PV
 ```
 
-**Flujo de una petición** (por ejemplo `POST /api/productos`):
+Cuando llega una petición, el Service `api-crud-lb` se la pasa a uno de los dos pods de la API. El pod se conecta a PostgreSQL usando el nombre `postgres` (el DNS interno de Kubernetes lo resuelve a la IP del Service) con el usuario y la contraseña que salen de un Secret. PostgreSQL guarda los datos en `/var/lib/postgresql/data`, que es donde está montado el PVC. Como el PVC está enlazado a un PV, si el pod de la base de datos se muere, el pod nuevo monta el mismo volumen y los datos siguen ahí.
 
-1. El **actor** (navegador, `curl`, Postman) llama al **Service `api-crud-lb`** (tipo `LoadBalancer`).
-2. El Service elige uno de los **2 pods** de la API que estén *Ready* y le pasa la conexión.
-3. El pod se conecta a PostgreSQL usando el nombre DNS **`postgres`** (el Service interno de la BBDD) con las credenciales del **Secret**.
-4. PostgreSQL guarda los datos en `/var/lib/postgresql/data`, que es el **PVC**, enlazado al **PV** (una carpeta en el nodo). Si el pod de la BBDD muere, el nuevo pod monta el mismo volumen y **no se pierde nada**.
-
-| Componente | Tecnología | Por qué |
-|---|---|---|
-| API | **Python 3.12 + FastAPI + SQLAlchemy** | CRUD en pocas líneas, validación automática y Swagger gratis |
-| BBDD | **PostgreSQL 16 (alpine)** | Relacional, robusta, imagen oficial liviana |
-| Contenedores | **Docker** | La imagen de la API se construye con [`api/Dockerfile`](api/Dockerfile) |
-| Orquestador | **Kubernetes** (minikube, Docker Desktop o kind) | Lo pide el parcial |
-
----
-
-## 📁 Estructura del repositorio
+## Estructura del repositorio
 
 ```
-.
-├── api/                              # PUNTO 1 · la API CRUD
-│   ├── app/
-│   │   ├── main.py                   #   endpoints CRUD + health/ready/info
-│   │   ├── models.py                 #   tabla "productos" (SQLAlchemy)
-│   │   ├── schemas.py                #   validación de datos (Pydantic)
-│   │   ├── database.py               #   conexión a PostgreSQL (lee variables de entorno)
-│   │   └── static/index.html         #   interfaz web
-│   ├── tests/                        #   pruebas unitarias (pytest)
-│   ├── Dockerfile                    #   imagen de la API
-│   └── requirements.txt
-├── k8s/                              # Manifiestos (se aplican en orden numérico)
-│   ├── 00-namespace.yaml
-│   ├── 01-postgres-secret.yaml       #   credenciales de la BBDD
-│   ├── 02-api-configmap.yaml         #   configuración de la API
-│   ├── 10-postgres-pv.yaml           # PUNTO 3 · PersistentVolume
-│   ├── 11-postgres-pvc.yaml          # PUNTO 3 · PersistentVolumeClaim
-│   ├── 12-postgres-deployment.yaml   # PUNTO 2 · Deployment BBDD (1 pod)
-│   ├── 13-postgres-service.yaml      #   Service interno de la BBDD
-│   ├── 20-api-deployment.yaml        # PUNTO 1 · Deployment API (2 pods)
-│   └── 21-api-service.yaml           # PUNTO 1 · Load Balancer
-├── scripts/
-│   ├── deploy.sh                     # construye la imagen y despliega todo
-│   ├── test-crud.sh                  # prueba Create/Read/Update/Delete
-│   ├── test-balanceo.sh              # muestra el reparto entre los 2 pods
-│   ├── test-persistencia.sh          # mata la BBDD y comprueba que los datos siguen
-│   └── cleanup.sh                    # borra todo
-├── docs/
-│   ├── punto-4-replicas-y-balanceo-bbdd.md   # PUNTO 4 · investigación completa
-│   └── ejemplos-no-implementados/            # YAML ilustrativos del punto 4 (no se aplican)
-├── docker-compose.yml                # correr la API sin Kubernetes (opcional)
-└── .github/workflows/ci.yml          # CI: pruebas + despliegue real en kind
+api/                  Código de la API (FastAPI), Dockerfile y pruebas
+  app/main.py           endpoints
+  app/models.py         tabla productos
+  app/schemas.py        validaciones
+  app/database.py       conexión a PostgreSQL
+  app/static/           página web
+k8s/                  Manifiestos de Kubernetes (se aplican en orden)
+  00-namespace.yaml
+  01-postgres-secret.yaml
+  02-api-configmap.yaml
+  10-postgres-pv.yaml
+  11-postgres-pvc.yaml
+  12-postgres-deployment.yaml
+  13-postgres-service.yaml
+  20-api-deployment.yaml
+  21-api-service.yaml
+scripts/              deploy.sh, pruebas y cleanup.sh
+docs/                 Investigación del punto 4 y ejemplos (no se despliegan)
+docker-compose.yml    Para correr la API sin Kubernetes
 ```
 
----
+## Requisitos
 
-## 🧰 Requisitos
+- Docker
+- kubectl
+- Un clúster local. Nosotros usamos minikube, pero también funciona con el Kubernetes de Docker Desktop o con kind.
 
-Necesitas **Docker**, **kubectl** y **un clúster de Kubernetes local**. Elige UNA opción de clúster:
-
-| Opción | Recomendado para | Instalación |
-|---|---|---|
-| **minikube** ⭐ | Cualquier sistema operativo | <https://minikube.sigs.k8s.io/docs/start/> |
-| **Docker Desktop** | Mac / Windows (el más fácil) | Settings → Kubernetes → *Enable Kubernetes* |
-| **kind** | Linux / CI | <https://kind.sigs.k8s.io/> |
-
-<details>
-<summary><b>macOS</b> (Homebrew)</summary>
+En Mac se puede instalar todo con Homebrew:
 
 ```bash
 brew install --cask docker
@@ -192,41 +102,12 @@ brew install --cask docker
 ```bash
 brew install kubectl minikube
 ```
-</details>
 
-<details>
-<summary><b>Windows</b> (PowerShell como administrador)</summary>
+En Windows se pueden instalar con winget (`Docker.DockerDesktop`, `Kubernetes.kubectl` y `Kubernetes.minikube`); los scripts `.sh` se corren desde Git Bash o WSL. En Linux hay instrucciones en la página de [minikube](https://minikube.sigs.k8s.io/docs/start/).
 
-```powershell
-winget install Docker.DockerDesktop
-winget install Kubernetes.kubectl
-winget install Kubernetes.minikube
-```
+## Cómo desplegarlo
 
-> Los scripts `.sh` se corren desde **Git Bash** o **WSL**. Si no, puedes ejecutar a mano los comandos `kubectl` que aparecen en esta guía.
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
-
-Docker: <https://docs.docker.com/engine/install/> · kubectl: <https://kubernetes.io/docs/tasks/tools/> · minikube:
-
-```bash
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube
-```
-</details>
-
-Comprueba que todo responde:
-
-```bash
-docker version && kubectl version --client && minikube version
-```
-
----
-
-## 🚀 Paso a paso: desplegar y probar
-
-### Paso 0 · Clonar el repositorio
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/jArango82/Sistemas-distribuidos-parcial-2.git
@@ -236,235 +117,200 @@ git clone https://github.com/jArango82/Sistemas-distribuidos-parcial-2.git
 cd Sistemas-distribuidos-parcial-2
 ```
 
-### Paso 1 · Encender el clúster
-
-**Con minikube:**
+### 2. Iniciar el clúster
 
 ```bash
-minikube start --driver=docker --cpus=2 --memory=4096
+minikube start --driver=docker
 ```
 
-**Con Docker Desktop:** activa Kubernetes en *Settings → Kubernetes* y selecciona el contexto:
+Si usan Docker Desktop, hay que activar Kubernetes en Settings > Kubernetes y después correr `kubectl config use-context docker-desktop`.
 
-```bash
-kubectl config use-context docker-desktop
-```
-
-Verifica que el nodo está `Ready`:
+Para revisar que el nodo esté listo:
 
 ```bash
 kubectl get nodes
 ```
 
-### Paso 2 · Construir la imagen y desplegar TODO
-
-Un solo comando:
+### 3. Construir la imagen y desplegar
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-El script detecta tu clúster y hace esto:
+El script construye la imagen `parcial2-api:1.0.0` a partir de `api/Dockerfile` (en minikube la construye directamente dentro del clúster, así que no hace falta subirla a Docker Hub), aplica todos los archivos de `k8s/` y espera a que PostgreSQL y las dos réplicas de la API estén listas.
 
-1. **Construye la imagen** `parcial2-api:1.0.0` desde `api/Dockerfile` (en minikube la construye *dentro* del clúster, así no se necesita Docker Hub).
-2. Aplica **todos los manifiestos** de `k8s/` en orden: namespace → secret/configmap → PV → PVC → PostgreSQL → API.
-3. **Espera** a que PostgreSQL y las 2 réplicas de la API estén listas.
-
-<details>
-<summary>¿Prefieres hacerlo a mano? (mismo resultado)</summary>
+Si prefieren hacerlo a mano, es lo mismo que:
 
 ```bash
-minikube image build -t parcial2-api:1.0.0 api/      # minikube
-# docker build -t parcial2-api:1.0.0 api/           # Docker Desktop
+minikube image build -t parcial2-api:1.0.0 api/
 kubectl apply -f k8s/
 kubectl -n parcial2 rollout status deployment/postgres
 kubectl -n parcial2 rollout status deployment/api-crud
 ```
-</details>
 
-### Paso 3 · Verificar que todo está arriba
+(En Docker Desktop se cambia la primera línea por `docker build -t parcial2-api:1.0.0 api/`).
+
+### 4. Revisar que todo esté corriendo
 
 ```bash
-kubectl -n parcial2 get deploy,pods,svc,pvc -o wide
+kubectl -n parcial2 get deploy,pods,svc,pvc
 ```
 
-Debes ver algo así:
+Debería salir algo así (esta salida es de la corrida de la CI):
 
 ```
 NAME                       READY   UP-TO-DATE   AVAILABLE
-deployment.apps/api-crud   2/2     2            2           ← PUNTO 1: 2 pods de la API
-deployment.apps/postgres   1/1     1            1           ← PUNTO 2: 1 pod de la BBDD
+deployment.apps/api-crud   2/2     2            2
+deployment.apps/postgres   1/1     1            1
 
-NAME                            READY   STATUS    
-pod/api-crud-6d5f7c9b8-4xk2p    1/1     Running   ← POD1
-pod/api-crud-6d5f7c9b8-r7m9t    1/1     Running   ← POD2
-pod/postgres-5b8c6d7f9-zq8wn    1/1     Running   ← POD1 BBDD
+NAME                            READY   STATUS    RESTARTS
+pod/api-crud-68bfc98bcc-fmqzl   1/1     Running   0
+pod/api-crud-68bfc98bcc-xs4tp   1/1     Running   0
+pod/postgres-6cf66d7685-2m6j5   1/1     Running   0
 
 NAME                  TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)
-service/api-crud-lb   LoadBalancer   10.96.120.15    127.0.0.1     80:31234/TCP   ← Load Balancer
-service/postgres      ClusterIP      10.96.45.200    <none>        5432/TCP
+service/api-crud-lb   LoadBalancer   10.96.125.119   <pending>     80:30899/TCP
+service/postgres      ClusterIP      10.96.224.12    <none>        5432/TCP
 
 NAME                                 STATUS   VOLUME        CAPACITY   ACCESS MODES   STORAGECLASS
-persistentvolumeclaim/postgres-pvc   Bound    postgres-pv   1Gi        RWO            manual   ← PUNTO 3
+persistentvolumeclaim/postgres-pvc   Bound    postgres-pv   1Gi        RWO            manual
 ```
 
-> El PVC debe estar en **`Bound`**: significa que se enlazó con el PV.
+Lo importante: `api-crud` con 2/2, `postgres` con 1/1 y el PVC en estado `Bound` (quiere decir que quedó enlazado con el PV).
 
-### Paso 4 · Acceder a la API desde fuera del clúster
+### 5. Entrar a la API
 
-El Service es tipo **LoadBalancer**. Cómo obtener su dirección depende del clúster:
+El Service es tipo LoadBalancer. En un clúster local no hay un balanceador de verdad, así que la `EXTERNAL-IP` queda en `<pending>` hasta que hagamos alguno de estos pasos según el clúster:
 
-| Clúster | Qué hacer | URL de la API |
-|---|---|---|
-| **Docker Desktop** | Nada, ya queda expuesto | <http://localhost> |
-| **minikube** | En **otra terminal** deja corriendo `minikube tunnel` (puede pedir tu contraseña porque usa el puerto 80) | <http://127.0.0.1> (mira `EXTERNAL-IP`) |
-| **minikube** (alternativa) | `minikube service api-crud-lb -n parcial2 --url` y usa la URL que imprime | la que imprime |
-| **kind** | `kubectl -n parcial2 port-forward svc/api-crud-lb 8080:80` | <http://localhost:8080> |
-
-Para minikube:
+- **minikube:** en otra terminal correr `minikube tunnel` y dejarla abierta (puede pedir la contraseña del computador porque usa el puerto 80). La API queda en `http://127.0.0.1`.
+- **Docker Desktop:** no hay que hacer nada, queda en `http://localhost`.
+- **kind:** `kubectl -n parcial2 port-forward svc/api-crud-lb 8080:80` y la API queda en `http://localhost:8080`.
 
 ```bash
 minikube tunnel
 ```
 
-Y comprueba la `EXTERNAL-IP` en otra terminal:
+Con eso ya se puede abrir en el navegador:
+
+- `http://127.0.0.1/` para la página web
+- `http://127.0.0.1/docs` para Swagger
+
+## Pruebas
+
+En los ejemplos usamos `http://127.0.0.1`; si su URL es otra, la cambian.
+
+### CRUD
 
 ```bash
-kubectl -n parcial2 get svc api-crud-lb
+./scripts/test-crud.sh http://127.0.0.1
 ```
 
-Abre en el navegador:
-
-- **`http://<EXTERNAL-IP>/`** → interfaz web (crear, editar, borrar productos y ver qué pod responde).
-- **`http://<EXTERNAL-IP>/docs`** → Swagger para probar cada endpoint.
-
-### Paso 5 · Probar el CRUD (punto 1)
+Hace un POST, GET, PATCH, PUT, DELETE y al final un GET que tiene que dar 404, mostrando qué pod atendió cada petición. También se puede probar a mano con curl:
 
 ```bash
-./scripts/test-crud.sh http://localhost
-```
-
-> Cambia `http://localhost` por la URL del paso 4. El script hace **POST → GET → PATCH → PUT → DELETE → GET (404)** y muestra qué pod atendió cada petición.
-
-O a mano con `curl`:
-
-```bash
-curl -X POST http://localhost/api/productos -H "Content-Type: application/json" -d '{"nombre":"Teclado","precio":189900,"stock":10}'
+curl -X POST http://127.0.0.1/api/productos -H "Content-Type: application/json" -d '{"nombre":"Teclado","precio":189900,"stock":10}'
 ```
 
 ```bash
-curl http://localhost/api/productos
+curl http://127.0.0.1/api/productos
 ```
 
 ```bash
-curl -X PATCH http://localhost/api/productos/1 -H "Content-Type: application/json" -d '{"stock":5}'
+curl -X PATCH http://127.0.0.1/api/productos/1 -H "Content-Type: application/json" -d '{"stock":5}'
 ```
 
 ```bash
-curl -X DELETE http://localhost/api/productos/1 -i
+curl -i -X DELETE http://127.0.0.1/api/productos/1
 ```
 
-### Paso 6 · Demostrar el balanceo entre POD1 y POD2 (punto 1)
+### Balanceo entre los dos pods
 
 ```bash
 ./scripts/test-balanceo.sh
 ```
 
-Sin argumentos lanza un pod temporal **dentro** del clúster que hace 40 peticiones al Service y cuenta quién respondió:
+Sin argumentos, el script crea un pod temporal dentro del clúster que hace 40 peticiones al Service y cuenta cuántas respondió cada pod. Resultado de la CI:
 
 ```
 Peticiones atendidas por cada pod:
-     22 api-crud-6d5f7c9b8-4xk2p
-     18 api-crud-6d5f7c9b8-r7m9t
+     28 api-crud-68bfc98bcc-xs4tp
+     12 api-crud-68bfc98bcc-fmqzl
 
-✅ El Service repartió la carga entre 2 pods.
+OK: el Service repartió la carga entre 2 pods.
 ```
 
-También puedes hacerlo desde tu máquina pasando la URL del Load Balancer (`./scripts/test-balanceo.sh http://localhost`) o con el botón **"Enviar 30 peticiones"** de la interfaz web.
+El reparto no es exactamente la mitad porque kube-proxy elige el pod al azar en cada conexión. También se puede correr desde el computador pasando la URL (`./scripts/test-balanceo.sh http://127.0.0.1`) o con el botón "Enviar 30 peticiones" de la página.
 
-> ⚠️ No uses `kubectl port-forward` para esta prueba: el port-forward se conecta a **un solo pod** y no pasa por el balanceo.
+Ojo: esta prueba no sirve con `kubectl port-forward`, porque el port-forward se conecta directo a un solo pod y no pasa por el balanceo del Service.
 
-Prueba extra de **tolerancia a fallos**: borra **uno** de los pods de la API y mira cómo Kubernetes crea otro mientras el servicio sigue respondiendo con el pod que queda:
+Si se borra uno de los dos pods de la API, el otro sigue respondiendo mientras Kubernetes crea el reemplazo:
 
 ```bash
-kubectl -n parcial2 delete pod "$(kubectl -n parcial2 get pod -l app=api-crud -o jsonpath='{.items[0].metadata.name}')" --wait=false
+kubectl -n parcial2 delete pod "$(kubectl -n parcial2 get pod -l app=api-crud -o jsonpath='{.items[0].metadata.name}')"
 ```
 
-```bash
-kubectl -n parcial2 get pods -w
-```
-
-### Paso 7 · Demostrar que el volumen funciona (punto 3)
+### Persistencia del volumen
 
 ```bash
 ./scripts/test-persistencia.sh
 ```
 
+Inserta un registro directamente en PostgreSQL, borra el pod de la base de datos, espera a que Kubernetes cree uno nuevo y busca el registro desde ese pod nuevo. Resultado de la CI:
+
 ```
-1️⃣  Pod actual de la BBDD: postgres-5b8c6d7f9-zq8wn
-    Insertado el producto 'persistencia-1760918400'
-2️⃣  Eliminando el pod postgres-5b8c6d7f9-zq8wn ...
-    Pod nuevo de la BBDD: postgres-5b8c6d7f9-h2v6c
-3️⃣  Buscando el producto en el pod nuevo...
-✅ El dato sobrevivió a la muerte del pod: el volumen funciona.
+[1/3] Pod actual de la BBDD: postgres-6cf66d7685-2m6j5
+      Insertado el producto 'persistencia-1792459452'
+[2/3] Eliminando el pod postgres-6cf66d7685-2m6j5 ...
+      Pod nuevo de la BBDD: postgres-6cf66d7685-4jbmf
+[3/3] Buscando el producto en el pod nuevo...
+OK: el dato sigue ahí después de borrar el pod, el volumen funciona.
 ```
 
-Para verlo "a mano" en la sustentación: crea productos en la interfaz web → borra el pod de PostgreSQL → recarga la página: **los productos siguen ahí**.
+Para mostrarlo sin el script: crear algunos productos en la página, borrar el pod de PostgreSQL con el comando de abajo y recargar la página. Los productos siguen.
 
 ```bash
 kubectl -n parcial2 delete pod -l app=postgres
 ```
 
-Ver dónde quedan físicamente los datos dentro del nodo (minikube):
+En minikube se puede ver dónde quedan los archivos de PostgreSQL dentro del nodo:
 
 ```bash
 minikube ssh -- sudo ls /data/parcial2-postgres/pgdata
 ```
 
-### Paso 8 · Limpiar
+### Borrar todo
 
 ```bash
 ./scripts/cleanup.sh
 ```
 
-> Por la política `Retain` del PV, los archivos de la BBDD siguen en el nodo: si vuelves a desplegar, los productos reaparecen. Para borrarlos del todo: `minikube ssh -- sudo rm -rf /data/parcial2-postgres`.
+Como el PV tiene `persistentVolumeReclaimPolicy: Retain`, los archivos de la base de datos se quedan en el nodo aunque se borre todo. Si se vuelve a desplegar, los productos aparecen otra vez. Para borrarlos del todo en minikube: `minikube ssh -- sudo rm -rf /data/parcial2-postgres`.
 
-<details>
-<summary>🐳 Opcional: correr la API sin Kubernetes (docker compose)</summary>
+### Sin Kubernetes
 
-Útil para desarrollar rápido:
+Para trabajar en la API sin el clúster se puede usar Docker Compose (queda en `http://localhost:8000`):
 
 ```bash
 docker compose up --build
 ```
 
-Queda en <http://localhost:8000>. Para correr las pruebas unitarias:
+Y las pruebas unitarias se corren con `pip install -r requirements-dev.txt` y `pytest` dentro de `api/`.
 
-```bash
-cd api && pip install -r requirements-dev.txt && pytest -q
-```
-</details>
+## Endpoints
 
----
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/productos` | Crea un producto (201) |
+| GET | `/api/productos` | Lista productos. Acepta `q` para buscar, `limit` y `offset` |
+| GET | `/api/productos/{id}` | Trae un producto (404 si no existe) |
+| PUT | `/api/productos/{id}` | Reemplaza todos los campos |
+| PATCH | `/api/productos/{id}` | Cambia solo los campos que se envían |
+| DELETE | `/api/productos/{id}` | Borra el producto (204) |
+| GET | `/api/info` | Nombre, IP y nodo del pod que respondió |
+| GET | `/health` | Lo usa la liveness probe |
+| GET | `/ready` | Lo usa la readiness probe, revisa la conexión a PostgreSQL |
 
-## 🔌 Endpoints de la API
-
-Base: `http://<EXTERNAL-IP>` · Documentación interactiva: **`/docs`**
-
-| Método | Ruta | Descripción | Respuesta |
-|---|---|---|---|
-| `POST` | `/api/productos` | **C**rear un producto | `201` + producto |
-| `GET` | `/api/productos?q=&limit=&offset=` | **R**ead: listar (con búsqueda y paginación) | `200` + lista |
-| `GET` | `/api/productos/{id}` | **R**ead de uno | `200` / `404` |
-| `PUT` | `/api/productos/{id}` | **U**pdate completo | `200` / `404` |
-| `PATCH` | `/api/productos/{id}` | **U**pdate parcial | `200` / `404` |
-| `DELETE` | `/api/productos/{id}` | **D**elete | `204` / `404` |
-| `GET` | `/api/info` | Pod, IP, nodo y nº de productos | `200` |
-| `GET` | `/health` | *Liveness*: el proceso vive | `200` |
-| `GET` | `/ready` | *Readiness*: hay conexión con PostgreSQL | `200` / `503` |
-| `GET` | `/` | Interfaz web | HTML |
-
-Modelo **Producto**:
+Un producto tiene esta forma:
 
 ```json
 {
@@ -473,229 +319,83 @@ Modelo **Producto**:
   "descripcion": "Switches rojos",
   "precio": 189900,
   "stock": 10,
-  "creado_por": "api-crud-6d5f7c9b8-4xk2p",
-  "actualizado_por": "api-crud-6d5f7c9b8-r7m9t",
+  "creado_por": "api-crud-68bfc98bcc-xs4tp",
+  "actualizado_por": "api-crud-68bfc98bcc-fmqzl",
   "creado_en": "2026-10-20T14:03:11Z",
   "actualizado_en": "2026-10-20T14:05:42Z"
 }
 ```
 
-Validaciones: `nombre` obligatorio (1–120 caracteres), `precio ≥ 0`, `stock ≥ 0`. Si no se cumplen → `422`.
+`nombre` es obligatorio (máximo 120 caracteres) y `precio` y `stock` no pueden ser negativos. Si algo no cumple, la API responde 422.
 
----
+## Detalles de los manifiestos
 
-## 🔍 Explicación de cada manifiesto
+**Namespace (`00`).** Todo queda en el namespace `parcial2`, así se puede ver con `kubectl -n parcial2 get all` y borrar junto.
 
-<details open>
-<summary><b>00 · Namespace</b> — <code>parcial2</code></summary>
+**Secret (`01`).** Tiene el usuario, la contraseña y el nombre de la base de datos. PostgreSQL los recibe como `POSTGRES_USER`, `POSTGRES_PASSWORD` y `POSTGRES_DB`, y la API como `DB_USER`, `DB_PASSWORD` y `DB_NAME`. Usamos `stringData` para escribirlos en texto plano (Kubernetes los guarda en base64). Lo dejamos en el repo porque es un trabajo académico; en un proyecto real no se subiría.
 
-Agrupa todos los recursos. Permite ver todo con `kubectl -n parcial2 get all` y borrarlo junto.
-</details>
+**ConfigMap (`02`).** Configuración de la API que no es secreta. `DB_HOST` vale `postgres`, que es el nombre del Service de la base de datos.
 
-<details>
-<summary><b>01 · Secret</b> — credenciales de PostgreSQL</summary>
+**PersistentVolume (`10`).** Es el almacenamiento. Usamos `hostPath`, que es una carpeta dentro del nodo (`/data/parcial2-postgres`), de 1Gi y con modo `ReadWriteOnce`. Le pusimos `Retain` para que los datos no se borren si alguien borra el PVC. `hostPath` sirve para clústeres de un solo nodo como minikube; en la nube se usaría un StorageClass que cree el disco automáticamente.
 
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
-- PostgreSQL las lee con `envFrom.secretRef`; la API las recibe como `DB_USER`, `DB_PASSWORD`, `DB_NAME` con `secretKeyRef`.
-- `stringData` deja escribirlas en texto plano; Kubernetes las guarda en base64. En un proyecto real **no** se suben al repo (se usan Sealed Secrets, External Secrets, Vault…).
-</details>
+**PersistentVolumeClaim (`11`).** Es la solicitud de almacenamiento que hace el pod de PostgreSQL: pide 1Gi, `ReadWriteOnce` y la clase `manual`. Kubernetes lo enlaza con el PV que cumpla esas condiciones. La idea de separar PV y PVC es que el Deployment no tenga que saber de dónde sale el disco.
 
-<details>
-<summary><b>02 · ConfigMap</b> — configuración de la API</summary>
+**Deployment de PostgreSQL (`12`).** Una réplica de `postgres:16-alpine` que monta el PVC en `/var/lib/postgresql/data`. Usa `strategy: Recreate` para que al actualizar primero se apague el pod viejo y después arranque el nuevo; con `RollingUpdate` habría por un momento dos PostgreSQL escribiendo en la misma carpeta. Las probes usan `pg_isready`.
 
-`DB_HOST: postgres` es el **nombre del Service** de la BBDD. El DNS interno de Kubernetes (CoreDNS) lo resuelve a `postgres.parcial2.svc.cluster.local`, así la API nunca depende de la IP de un pod.
-</details>
+**Service de PostgreSQL (`13`).** Tipo `ClusterIP`, o sea que solo se puede usar desde dentro del clúster. Le da a la base de datos un nombre fijo (`postgres`) aunque el pod cambie de IP.
 
-<details>
-<summary><b>10 · PersistentVolume</b> — el "disco" (punto 3)</summary>
+**Deployment de la API (`20`).** Dos réplicas. Tiene un initContainer que espera a que PostgreSQL acepte conexiones antes de arrancar la API. Con la Downward API cada pod recibe su propio nombre, IP y nodo, que es lo que devuelve en `X-Served-By` y en `/api/info`. Tiene tres probes:
 
-| Campo | Valor | Significado |
-|---|---|---|
-| `capacity.storage` | `1Gi` | Tamaño |
-| `accessModes` | `ReadWriteOnce` | Lo monta **un nodo** en lectura/escritura |
-| `persistentVolumeReclaimPolicy` | `Retain` | Si se borra el PVC, **los datos se conservan** (con `Delete` se borrarían) |
-| `storageClassName` | `manual` | Etiqueta para que solo lo reclame nuestro PVC |
-| `hostPath.path` | `/data/parcial2-postgres` | Carpeta real dentro del nodo |
+- `startupProbe` le da hasta 60 segundos para arrancar.
+- `livenessProbe` (`/health`): si falla, Kubernetes reinicia el contenedor.
+- `readinessProbe` (`/ready`): si falla (por ejemplo porque se cayó la base de datos), el pod deja de recibir tráfico pero no se reinicia.
 
-`hostPath` es ideal para clústeres locales de un nodo. En la nube se usaría un StorageClass (discos EBS, Persistent Disk, Azure Disk…) y el PV se crearía solo (*aprovisionamiento dinámico*).
-</details>
+La actualización es `RollingUpdate` con `maxUnavailable: 0`, para que siempre haya al menos 2 pods disponibles. El contenedor corre con un usuario que no es root.
 
-<details>
-<summary><b>11 · PersistentVolumeClaim</b> — la "solicitud" de disco (punto 3)</summary>
+**Service de la API (`21`).** Tipo `LoadBalancer`, puerto 80 hacia el 8000 del contenedor. Reparte el tráfico entre los pods con la etiqueta `app=api-crud` que estén listos. Un detalle: kube-proxy reparte por conexión TCP, no por petición, así que si el navegador reutiliza la conexión todas las peticiones caen en el mismo pod. Por eso la API responde con `Connection: close` en las rutas `/api/`, para que en la demo se vea el reparto. En producción no se haría.
 
-El pod no pide un PV concreto: pide "**1Gi, ReadWriteOnce, clase manual**" y Kubernetes lo enlaza (`Bound`) con un PV que cumpla. Esto **desacopla** la aplicación de la infraestructura: el mismo Deployment funciona con hostPath, NFS o un disco en la nube.
+## Punto 4: réplicas de la BBDD y balanceo
 
-```
-Pod ──usa──▶ PVC (postgres-pvc) ──Bound──▶ PV (postgres-pv) ──▶ /data/parcial2-postgres en el nodo
-```
-</details>
+El documento completo está en [`docs/punto-4-replicas-y-balanceo-bbdd.md`](docs/punto-4-replicas-y-balanceo-bbdd.md). En resumen:
 
-<details>
-<summary><b>12 · Deployment de PostgreSQL</b> (punto 2)</summary>
+No sirve con cambiar `replicas: 1` por `replicas: 3` en el Deployment de PostgreSQL. Los tres pods montarían el mismo volumen y escribirían en la misma carpeta, lo que corrompe los datos. Y si cada uno tuviera su propio volumen, serían tres bases de datos distintas, cada una con datos diferentes. La diferencia con la API es que la API no guarda estado y cualquier réplica responde igual, mientras que la base de datos sí guarda estado y las réplicas tienen que estar sincronizadas.
 
-- `replicas: 1` → el POD1 del diagrama.
-- `strategy: Recreate` → al actualizar, primero muere el pod viejo y luego nace el nuevo. Con `RollingUpdate` habría **dos PostgreSQL sobre la misma carpeta** al mismo tiempo (corrupción).
-- `volumeMounts` monta el PVC en `/var/lib/postgresql/data`, y `PGDATA` apunta a una subcarpeta `pgdata`.
-- `readinessProbe` / `livenessProbe` con `pg_isready -h 127.0.0.1`: el pod solo recibe tráfico cuando PostgreSQL acepta conexiones TCP.
-- `resources` → reserva y limita CPU/memoria.
-</details>
+Lo que se usa en Kubernetes es un **StatefulSet**: los pods tienen nombres fijos (`postgres-0`, `postgres-1`, `postgres-2`), cada uno tiene su propio PVC y cada uno tiene su propio DNS a través de un Service headless.
 
-<details>
-<summary><b>13 · Service de PostgreSQL</b> — ClusterIP</summary>
+Encima de eso se configura la **replicación de PostgreSQL** (streaming replication). Un nodo es el primario y es el único que acepta escrituras; los demás son réplicas que reciben los cambios del primario (el WAL) y solo atienden lecturas. La replicación puede ser asíncrona, que es más rápida pero puede perder las últimas transacciones si el primario se cae, o síncrona, que no pierde datos pero hace más lentas las escrituras.
 
-Nombre DNS fijo (`postgres`) e IP virtual estable para la BBDD. Es **`ClusterIP`**: solo accesible **dentro** del clúster (la BBDD no debe exponerse a Internet).
-</details>
+Como PostgreSQL no cambia de primario solo cuando el primario se cae, se necesita algo que haga el **failover**: Patroni o un operador como CloudNativePG, que detectan la caída y promueven una réplica.
 
-<details>
-<summary><b>20 · Deployment de la API</b> (punto 1)</summary>
+Para **balancear la carga**, las escrituras tienen que ir al primario y las lecturas se pueden repartir entre las réplicas. Hay varias formas:
 
-- `replicas: 2` → POD1 y POD2 del diagrama.
-- `RollingUpdate` con `maxUnavailable: 0`: al actualizar la imagen nunca baja de 2 pods disponibles (cero caída).
-- `initContainers.esperar-postgres`: no arranca la API hasta que PostgreSQL responda.
-- **Downward API** (`POD_NAME`, `POD_IP`, `NODE_NAME`): el pod conoce su propio nombre y lo devuelve en `X-Served-By`.
-- Tres probes:
-  - `startupProbe` → le da hasta 60 s para arrancar.
-  - `livenessProbe` (`/health`) → si falla, **reinicia** el contenedor.
-  - `readinessProbe` (`/ready`) → si falla (p. ej. se cayó la BBDD), **lo saca del balanceador** sin reiniciarlo.
-- `securityContext` → corre sin root.
-</details>
+- Dos Services: `postgres-rw`, que apunta solo al primario, y `postgres-ro`, que reparte entre las réplicas. CloudNativePG los crea solo.
+- Un proxy que entiende SQL, como Pgpool-II (manda los SELECT a las réplicas automáticamente) o HAProxy con los health checks de Patroni. PgBouncer sirve para manejar el pool de conexiones.
+- Desde la aplicación, con una conexión para escribir y otra para leer, o con cadenas de conexión de libpq con varios hosts (`target_session_attrs`, `load_balance_hosts`).
 
-<details>
-<summary><b>21 · Service LoadBalancer</b> (punto 1, el "Load Balancer" del diagrama)</summary>
+También existen bases de datos que escalan las escrituras, no solo las lecturas: multi-primario (Galera), sharding (Citus, Vitess) y bases de datos distribuidas como CockroachDB o YugabyteDB. El costo de replicar es el replication lag (una lectura en una réplica puede no ver todavía lo que se acaba de escribir) y lo que dicen los teoremas CAP y PACELC sobre consistencia, disponibilidad y latencia.
 
-- `type: LoadBalancer` → pide una IP externa al proveedor (en la nube crea un balanceador real; en local la entregan Docker Desktop o `minikube tunnel`).
-- `selector: app=api-crud` → manda tráfico a **todos los pods Ready** con esa etiqueta.
-- `port: 80 → targetPort: 8000`.
-- `kube-proxy` reparte **por conexión TCP**. Por eso la API responde `Connection: close` en `/api/*`: cada petición abre una conexión nueva y se ve el reparto entre los pods (en producción se dejaría *keep-alive*).
-</details>
-
----
-
-## 🧠 Punto 4: réplicas y balanceo de la BBDD
-
-> 📄 **Documento completo:** [`docs/punto-4-replicas-y-balanceo-bbdd.md`](docs/punto-4-replicas-y-balanceo-bbdd.md)
-
-**Resumen:**
-
-1. **No basta con `replicas: 3` en el Deployment de PostgreSQL.** Los 3 pods compartirían el mismo volumen (corrupción) o, con volúmenes distintos, serían 3 bases **con datos diferentes**. La API es *stateless* (sus réplicas son intercambiables); la BBDD es *stateful*.
-2. **StatefulSet** en lugar de Deployment: pods con nombre estable (`postgres-0`, `postgres-1`, `postgres-2`), **un PVC por réplica** (`volumeClaimTemplates`) y DNS propio por pod (Service *headless*).
-3. **Replicación primario → réplicas** (*streaming replication*): solo el primario escribe; envía su WAL a las réplicas, que atienden **lecturas**. Puede ser **asíncrona** (rápida, pero se pueden perder las últimas transacciones) o **síncrona** (sin pérdida, más latencia).
-4. **Failover automático** con **Patroni** o un **Operator** como **CloudNativePG**: si el primario muere, promueve una réplica y evita *split-brain*.
-5. **Balanceo de carga — escrituras al primario, lecturas a las réplicas:**
-   - Dos Services: **`postgres-rw`** (selecciona `role=primary`) y **`postgres-ro`** (selecciona `role=replica`, reparte entre réplicas).
-   - Un proxy SQL: **Pgpool-II** (separa `SELECT` automáticamente), **HAProxy + Patroni** (health checks `/primary` y `/replica`), **PgBouncer** (pool de conexiones).
-   - En la app: dos conexiones (`writer` y `reader`), o cadenas `libpq` con varios hosts (`target_session_attrs=read-write`, `load_balance_hosts=random`).
-6. **Otras arquitecturas:** multi-primario (Galera, Group Replication), sharding (Citus, Vitess) y Distributed SQL (CockroachDB, YugabyteDB) que **también escalan escrituras**.
-7. **El costo:** *replication lag* (leer un dato que aún no llega a la réplica), teoremas **CAP** y **PACELC**.
-
-**Propuesta para este proyecto:** instalar **CloudNativePG**, reemplazar los manifiestos `10`–`13` por un `Cluster` con `instances: 3` (1 primario + 2 réplicas, 1 síncrona) y que la API use `postgres-rw` para escribir y `postgres-ro` para leer. Ejemplo (sin aplicar) en [`docs/ejemplos-no-implementados/cloudnativepg-cluster.yaml`](docs/ejemplos-no-implementados/cloudnativepg-cluster.yaml).
+Para este proyecto, lo que haríamos es instalar CloudNativePG, cambiar los manifiestos `10` a `13` por un recurso `Cluster` con 3 instancias (1 primario y 2 réplicas, una de ellas síncrona) y hacer que la API use `postgres-rw` para escribir y `postgres-ro` para leer:
 
 ```mermaid
 flowchart LR
     A1[API pod 1] & A2[API pod 2] -->|escrituras| RW{{postgres-rw}}
     A1 & A2 -->|lecturas| RO{{postgres-ro}}
-    RW --> P[(postgres-0 · PRIMARIO)]
-    RO --> R1[(postgres-1 · réplica)] & R2[(postgres-2 · réplica)]
-    P -. streaming WAL .-> R1 & R2
+    RW --> P[(postgres-0 primario)]
+    RO --> R1[(postgres-1 réplica)] & R2[(postgres-2 réplica)]
+    P -. WAL .-> R1 & R2
 ```
 
----
+Dejamos un ejemplo de cómo se vería en [`docs/ejemplos-no-implementados/`](docs/ejemplos-no-implementados/), pero no se aplica porque el punto pide solo investigar.
 
-## 🎤 Guion para la sustentación (5 minutos)
+## Problemas comunes
 
-| Min | Qué mostrar | Comando / acción |
-|:-:|---|---|
-| 0:00 | Arquitectura y manifiestos | Este README → diagrama de [Arquitectura](#️-arquitectura) |
-| 0:45 | Todo corriendo | `kubectl -n parcial2 get deploy,pods,svc,pvc,pv` |
-| 1:30 | **Punto 1** – CRUD | Interfaz web: crear, editar y borrar un producto (ver el pod en cada fila) o `./scripts/test-crud.sh <URL>` |
-| 2:15 | **Punto 1** – Balanceo | Botón **"Enviar 30 peticiones"** o `./scripts/test-balanceo.sh` |
-| 2:45 | Tolerancia a fallos de la API | `kubectl -n parcial2 delete pod <pod-api>` → la web sigue funcionando y aparece un pod nuevo |
-| 3:15 | **Puntos 2 y 3** – BBDD + volumen | `kubectl -n parcial2 delete pod -l app=postgres` → recargar la web: **los datos siguen** |
-| 4:00 | **Punto 4** – Investigación | Explicar el diagrama de réplicas: StatefulSet + primario/réplicas + Services rw/ro |
+- **El pod de la API queda en `ErrImagePull` o `ImagePullBackOff`:** la imagen no está dentro del clúster. Hay que volver a correr `./scripts/deploy.sh`.
+- **`EXTERNAL-IP` se queda en `<pending>`:** en minikube falta dejar corriendo `minikube tunnel`.
+- **El pod de la API se queda en `Init:0/1`:** está esperando a PostgreSQL. Revisar con `kubectl -n parcial2 logs deploy/postgres`.
+- **El PVC queda en `Pending`:** si el PV quedó en estado `Released` de un despliegue anterior, hay que borrarlo (`kubectl delete pv postgres-pv`) y desplegar otra vez.
+- **El balanceo muestra un solo pod:** revisar que los dos pods estén `Running` y no usar `port-forward` para esa prueba.
 
----
-
-## ❓ Preguntas que puede hacer el profe
-
-<details>
-<summary><b>¿Cuál es la diferencia entre PV y PVC?</b></summary>
-
-El **PV** es el recurso de almacenamiento real del clúster (lo crea el administrador o un StorageClass). El **PVC** es la solicitud que hace la aplicación ("necesito 1Gi RWO"). Kubernetes los enlaza. Así el Deployment no sabe ni le importa si el disco es hostPath, NFS o un disco de AWS.
-</details>
-
-<details>
-<summary><b>¿Qué pasa si se borra el pod de PostgreSQL?</b></summary>
-
-El Deployment detecta que hay 0 de 1 réplicas y crea un pod nuevo, que monta **el mismo PVC** → mismos datos. Mientras tanto, la readiness de la API falla (`/ready` → 503) y los pods de la API salen del balanceador hasta que la BBDD vuelve.
-</details>
-
-<details>
-<summary><b>¿Y si se borra un pod de la API?</b></summary>
-
-El otro pod sigue atendiendo (el Service solo envía tráfico a pods *Ready*) y el Deployment crea un reemplazo. Cero caída.
-</details>
-
-<details>
-<summary><b>¿Por qué la API usa LoadBalancer y la BBDD ClusterIP?</b></summary>
-
-La API debe ser accesible desde fuera (el actor). La BBDD solo la usa la API, así que se deja **interna** por seguridad.
-</details>
-
-<details>
-<summary><b>¿Cómo encuentra la API a la base de datos?</b></summary>
-
-Por **DNS**: `DB_HOST=postgres` (ConfigMap). CoreDNS resuelve `postgres` a la IP del Service, que siempre apunta al pod actual de la BBDD aunque cambie de IP.
-</details>
-
-<details>
-<summary><b>¿Diferencia entre liveness y readiness?</b></summary>
-
-**Liveness** = "¿estás vivo?"; si falla, Kubernetes **reinicia** el contenedor. **Readiness** = "¿puedes recibir tráfico?"; si falla, el pod **sale del Service** pero no se reinicia.
-</details>
-
-<details>
-<summary><b>¿Por qué <code>strategy: Recreate</code> en PostgreSQL?</b></summary>
-
-Con `RollingUpdate`, durante una actualización habría 2 pods de PostgreSQL usando la misma carpeta de datos a la vez → corrupción. `Recreate` garantiza que solo exista uno.
-</details>
-
-<details>
-<summary><b>¿Por qué <code>Retain</code> y no <code>Delete</code>?</b></summary>
-
-Con `Retain`, si alguien borra el PVC (o todo el namespace), los datos **no se pierden**. Con `Delete` se borraría el almacenamiento junto con el PVC.
-</details>
-
-<details>
-<summary><b>¿Cómo escalaría la API a 5 pods?</b></summary>
-
-`kubectl -n parcial2 scale deployment api-crud --replicas=5` (o cambiar `replicas` en el YAML). Se podría automatizar con un **HorizontalPodAutoscaler** según el uso de CPU.
-</details>
-
-<details>
-<summary><b>¿Por qué no escalan igual la API y la BBDD?</b></summary>
-
-La API no guarda estado (todo está en la BBDD), así que cualquier réplica responde igual. La BBDD sí guarda estado: las réplicas deben **sincronizarse** → ver [Punto 4](#-punto-4-réplicas-y-balanceo-de-la-bbdd).
-</details>
-
----
-
-## 🛠️ Solución de problemas
-
-| Síntoma | Causa | Solución |
-|---|---|---|
-| Pod de la API en `ErrImagePull` / `ImagePullBackOff` | La imagen no está dentro del clúster | Vuelve a correr `./scripts/deploy.sh` (o `minikube image build -t parcial2-api:1.0.0 api/`) |
-| `EXTERNAL-IP` queda en `<pending>` | minikube/kind no tienen balanceador propio | minikube: deja corriendo `minikube tunnel`. kind: usa `port-forward` |
-| Pod de la API en `Init:0/1` mucho tiempo | PostgreSQL no está listo | `kubectl -n parcial2 logs deploy/postgres` y `kubectl -n parcial2 describe pod -l app=postgres` |
-| PVC en `Pending` | No se enlazó con el PV | `kubectl describe pvc -n parcial2 postgres-pvc`; si el PV quedó `Released` de un despliegue anterior: `kubectl delete pv postgres-pv` y vuelve a desplegar |
-| `CrashLoopBackOff` en la API | No conecta a la BBDD o error de código | `kubectl -n parcial2 logs -l app=api-crud --tail=50` |
-| El balanceo muestra 1 solo pod | Se está usando `port-forward` o hay 1 réplica Ready | Usa `./scripts/test-balanceo.sh` sin argumentos y revisa `kubectl -n parcial2 get pods` |
-| `minikube tunnel` pide contraseña | Necesita abrir el puerto 80 | Es normal: escribe la contraseña de tu usuario |
-
-Comandos útiles:
-
-```bash
-kubectl -n parcial2 get all
-```
+Para ver los logs de la API o consultar la base de datos directamente:
 
 ```bash
 kubectl -n parcial2 logs -f -l app=api-crud --prefix
@@ -705,29 +405,7 @@ kubectl -n parcial2 logs -f -l app=api-crud --prefix
 kubectl -n parcial2 exec -it deploy/postgres -- psql -U parcial2 -d inventario -c "SELECT id, nombre, creado_por FROM productos;"
 ```
 
----
+## Integrantes
 
-## 🤖 Pruebas automáticas (CI)
-
-En cada push, [GitHub Actions](.github/workflows/ci.yml) ejecuta:
-
-1. **Pruebas unitarias** de la API (`pytest`).
-2. **Validación** de los manifiestos contra el esquema oficial de Kubernetes (`kubeconform`).
-3. **Despliegue real** en un clúster Kubernetes efímero (**kind**): corre `deploy.sh`, `test-crud.sh`, `test-balanceo.sh` y `test-persistencia.sh`.
-
-Si el badge de arriba está en verde ✅, todo lo de esta guía funciona en un Kubernetes real.
-
----
-
-## 👥 Integrantes
-
-| Nombre | GitHub |
-|---|---|
-| Juan Manuel Arango Bedoya | [@jArango82](https://github.com/jArango82) |
-| *Compañero(a) por completar* | |
-
-<div align="center">
-
-*Sistemas Distribuidos · Parcial 2 · 2026*
-
-</div>
+- Juan Manuel Arango Bedoya ([@jArango82](https://github.com/jArango82))
+- (pendiente)
