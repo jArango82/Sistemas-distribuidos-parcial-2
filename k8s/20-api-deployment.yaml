@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PUNTO 1 · Deployment de la API CRUD con 2 pods (POD1 y POD2 del diagrama)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-crud
+  namespace: parcial2
+  labels:
+    app: api-crud
+    app.kubernetes.io/part-of: parcial2
+spec:
+  replicas: 2
+  # Actualización sin caída: sube un pod nuevo antes de bajar uno viejo.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: api-crud
+  template:
+    metadata:
+      labels:
+        app: api-crud
+        app.kubernetes.io/part-of: parcial2
+    spec:
+      # Espera a que PostgreSQL acepte conexiones antes de arrancar la API.
+      initContainers:
+        - name: esperar-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do echo "Esperando a PostgreSQL..."; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: api-config
+      containers:
+        - name: api
+          # Imagen construida localmente (ver scripts/deploy.sh).
+          image: parcial2-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: api-config          # DB_HOST, DB_PORT, APP_VERSION, LOG_LEVEL
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: postgres-secret, key: POSTGRES_USER }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-secret, key: POSTGRES_PASSWORD }
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef: { name: postgres-secret, key: POSTGRES_DB }
+            # Downward API: el pod conoce su propio nombre, IP y nodo.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: POD_IP
+              valueFrom:
+                fieldRef: { fieldPath: status.podIP }
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+          # startupProbe: da hasta 60 s para arrancar antes de que actúe la liveness.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          # livenessProbe: si falla, Kubernetes reinicia el contenedor.
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          # readinessProbe: si falla (p. ej. sin BBDD), el pod sale del balanceo
+          # del Service pero NO se reinicia.
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false

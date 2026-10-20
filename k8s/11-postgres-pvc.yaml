@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PUNTO 3 · Volumen para la BBDD (2/2): PersistentVolumeClaim
+# ─────────────────────────────────────────────────────────────────────────────
+# Es la "solicitud" de almacenamiento que hace el pod. Kubernetes la enlaza (Bound)
+# con un PV compatible: mismo storageClassName, accessMode y capacidad suficiente.
+# El Deployment de PostgreSQL monta este PVC en /var/lib/postgresql/data.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: parcial2
+  labels:
+    app.kubernetes.io/part-of: parcial2
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  selector:
+    matchLabels:
+      tipo: bbdd                  # Solo se enlaza con NUESTRO PV.

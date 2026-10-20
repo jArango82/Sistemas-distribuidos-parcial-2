@@ -1,0 +1,7 @@
+# Namespace: agrupa todos los recursos del parcial para poder verlos y borrarlos juntos.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: parcial2
+  labels:
+    app.kubernetes.io/part-of: parcial2

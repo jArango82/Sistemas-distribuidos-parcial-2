@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PUNTO 3 · Volumen para la BBDD (1/2): PersistentVolume
+# ─────────────────────────────────────────────────────────────────────────────
+# Es el "disco" del clúster. Lo crea el administrador (aprovisionamiento estático).
+# Usa hostPath: una carpeta dentro del nodo (/data/parcial2-postgres).
+#   - En minikube, /data sobrevive a `minikube stop` / `minikube start`.
+#   - Sirve para clústeres de UN nodo (minikube, kind, Docker Desktop). En un
+#     clúster de varios nodos se usaría un StorageClass real (EBS, PD, NFS, Longhorn...).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+  labels:
+    app.kubernetes.io/part-of: parcial2
+    tipo: bbdd
+spec:
+  storageClassName: manual        # Debe coincidir con el del PVC para que se "casen".
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce               # Lo monta un solo nodo en modo lectura/escritura.
+  persistentVolumeReclaimPolicy: Retain   # Si se borra el PVC, los datos NO se borran.
+  hostPath:
+    path: /data/parcial2-postgres
+    type: DirectoryOrCreate

@@ -1,0 +1,19 @@
+# Service interno (ClusterIP) de PostgreSQL.
+# Da un nombre DNS fijo, "postgres", para que la API no dependa de la IP del pod
+# (que cambia cada vez que el pod se recrea). No es accesible desde fuera del clúster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: parcial2
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: parcial2
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

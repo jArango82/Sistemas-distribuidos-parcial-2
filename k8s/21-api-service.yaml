@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PUNTO 1 · Load Balancer del diagrama
+# ─────────────────────────────────────────────────────────────────────────────
+# Service tipo LoadBalancer: expone la API fuera del clúster y reparte las
+# conexiones entre los pods que tengan la etiqueta app=api-crud y estén "Ready".
+#   - Docker Desktop: queda en http://localhost
+#   - minikube: correr `minikube tunnel` para que reciba EXTERNAL-IP
+#   - Nube (GKE/EKS/AKS): el proveedor crea un balanceador real con IP pública
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-crud-lb
+  namespace: parcial2
+  labels:
+    app: api-crud
+    app.kubernetes.io/part-of: parcial2
+spec:
+  type: LoadBalancer
+  selector:
+    app: api-crud
+  ports:
+    - name: http
+      port: 80            # Puerto público del balanceador
+      targetPort: http    # Puerto 8000 del contenedor

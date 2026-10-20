@@ -1,0 +1,15 @@
+# ConfigMap: configuración NO sensible de la API.
+# DB_HOST es el nombre del Service de PostgreSQL: el DNS interno de Kubernetes
+# lo resuelve a la IP del Service (postgres.parcial2.svc.cluster.local).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: parcial2
+  labels:
+    app.kubernetes.io/part-of: parcial2
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  APP_VERSION: "1.0.0"
+  LOG_LEVEL: INFO

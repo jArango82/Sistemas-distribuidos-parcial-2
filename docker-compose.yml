@@ -1,0 +1,32 @@
+# Para desarrollar/probar la API sin Kubernetes:
+#   docker compose up --build   →   http://localhost:8000
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: parcial2
+      POSTGRES_PASSWORD: Sistemas-Distribuidos-2026
+      POSTGRES_DB: inventario
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parcial2 -d inventario"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: ./api
+    image: parcial2-api:1.0.0
+    environment:
+      DB_HOST: postgres
+      DB_USER: parcial2
+      DB_PASSWORD: Sistemas-Distribuidos-2026
+      DB_NAME: inventario
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -1,0 +1,57 @@
+# ⚠️ EJEMPLO DEL PUNTO 4 — NO SE APLICA EN EL DESPLIEGUE.
+#
+# Opción recomendada: el operator CloudNativePG (https://cloudnative-pg.io).
+# Requiere instalar antes el operator en el clúster (ver su documentación).
+#
+# Con este recurso el operator crea:
+#   - 3 pods de PostgreSQL (1 primario + 2 réplicas) con un PVC cada uno
+#   - replicación por streaming y failover automático
+#   - Services:  postgres-rw  → primario   (escrituras)
+#                postgres-ro  → réplicas   (lecturas)
+#                postgres-r   → cualquiera
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-app-credentials
+  namespace: parcial2
+type: kubernetes.io/basic-auth
+stringData:
+  username: parcial2
+  password: Sistemas-Distribuidos-2026
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: parcial2
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 1Gi
+  # Al menos 1 réplica debe confirmar cada COMMIT → no se pierden datos si cae el primario.
+  postgresql:
+    synchronous:
+      method: any
+      number: 1
+  bootstrap:
+    initdb:
+      database: inventario
+      owner: parcial2
+      secret:
+        name: postgres-app-credentials
+---
+# Pool de conexiones (PgBouncer) delante de las réplicas, para las lecturas de la API.
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: postgres-pooler-ro
+  namespace: parcial2
+spec:
+  cluster:
+    name: postgres
+  instances: 2
+  type: ro
+  pgbouncer:
+    poolMode: session

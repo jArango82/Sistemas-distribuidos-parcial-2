@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PUNTO 2 · Deployment de la BBDD (PostgreSQL 16) con 1 pod
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: parcial2
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: parcial2
+spec:
+  replicas: 1
+  # Recreate: al actualizar, primero se elimina el pod viejo y luego se crea el nuevo.
+  # Con RollingUpdate habría dos PostgreSQL usando la misma carpeta de datos a la vez
+  # (corrupción) y el volumen ReadWriteOnce no siempre se podría montar dos veces.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/part-of: parcial2
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          # POSTGRES_USER, POSTGRES_PASSWORD y POSTGRES_DB salen del Secret.
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          env:
+            # Subcarpeta dentro del volumen: evita problemas si el punto de montaje
+            # trae archivos propios (p. ej. lost+found).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          # -h 127.0.0.1: durante la inicialización PostgreSQL solo escucha por socket,
+          # así el pod no se marca "Ready" hasta que el servidor definitivo esté arriba.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc     # ← PUNTO 3: aquí se conecta el volumen.

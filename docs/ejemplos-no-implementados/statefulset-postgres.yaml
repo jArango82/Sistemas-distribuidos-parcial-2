@@ -1,0 +1,90 @@
+# ⚠️ EJEMPLO DEL PUNTO 4 — NO SE APLICA EN EL DESPLIEGUE.
+#
+# Esqueleto de PostgreSQL con StatefulSet. Muestra las piezas de Kubernetes
+# necesarias para tener réplicas; la replicación en sí (pg_basebackup,
+# primary_conninfo, standby.signal) y el failover los haría Patroni o un Operator,
+# que además ponen la etiqueta `role: primary|replica` en cada pod.
+---
+# Service "headless" (clusterIP: None): da un DNS propio a cada pod
+#   postgres-0.postgres-headless.parcial2.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: parcial2
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: parcial2
+spec:
+  serviceName: postgres-headless
+  replicas: 3                       # postgres-0 (primario), postgres-1 y postgres-2 (réplicas)
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  # Un PVC POR RÉPLICA: data-postgres-0, data-postgres-1, data-postgres-2.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Escrituras → solo el pod con role=primary
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-rw
+  namespace: parcial2
+spec:
+  selector:
+    app: postgres
+    role: primary
+  ports:
+    - port: 5432
+      targetPort: postgres
+---
+# Lecturas → se reparten entre los pods con role=replica
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-ro
+  namespace: parcial2
+spec:
+  selector:
+    app: postgres
+    role: replica
+  ports:
+    - port: 5432
+      targetPort: postgres
