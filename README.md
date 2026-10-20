@@ -4,7 +4,7 @@
 
 API CRUD de productos desplegada en Kubernetes. La API corre con 2 réplicas detrás de un Service tipo LoadBalancer y guarda los datos en PostgreSQL, que a su vez usa un volumen persistente para no perder la información cuando el pod se reinicia.
 
-Parcial 2 (20%) - 20 de octubre - en parejas.
+Parcial 2 (20%) - 20 de octubre.
 
 ## Enunciado
 
@@ -17,14 +17,14 @@ Parcial 2 (20%) - 20 de octubre - en parejas.
 | 3 | Crear un Volumen para la BBDD | 1.5 |
 | 4 | Investigar cómo tener varias réplicas de la BBDD y cómo balancear esa carga (sin implementarlo) | 1.5 |
 
-## Qué hicimos en cada punto
+## Qué hice en cada punto
 
-1. **API CRUD.** La hicimos en Python con FastAPI y SQLAlchemy ([`api/`](api/)). Se despliega con un Deployment de 2 réplicas ([`k8s/20-api-deployment.yaml`](k8s/20-api-deployment.yaml)) y se expone con un Service tipo LoadBalancer ([`k8s/21-api-service.yaml`](k8s/21-api-service.yaml)), que es el load balancer del diagrama.
+1. **API CRUD.** La hice en Python con FastAPI y SQLAlchemy ([`api/`](api/)). Se despliega con un Deployment de 2 réplicas ([`k8s/20-api-deployment.yaml`](k8s/20-api-deployment.yaml)) y se expone con un Service tipo LoadBalancer ([`k8s/21-api-service.yaml`](k8s/21-api-service.yaml)), que es el load balancer del diagrama.
 2. **Deployment de la BBDD.** PostgreSQL 16 con 1 réplica ([`k8s/12-postgres-deployment.yaml`](k8s/12-postgres-deployment.yaml)) y un Service interno para que la API lo encuentre por nombre ([`k8s/13-postgres-service.yaml`](k8s/13-postgres-service.yaml)).
 3. **Volumen.** Un PersistentVolume ([`k8s/10-postgres-pv.yaml`](k8s/10-postgres-pv.yaml)) y un PersistentVolumeClaim ([`k8s/11-postgres-pvc.yaml`](k8s/11-postgres-pvc.yaml)) que se monta en la carpeta de datos de PostgreSQL.
 4. **Investigación.** Está en [`docs/punto-4-replicas-y-balanceo-bbdd.md`](docs/punto-4-replicas-y-balanceo-bbdd.md), con un resumen [al final de este README](#punto-4-réplicas-de-la-bbdd-y-balanceo).
 
-Además de lo que pedía el enunciado agregamos:
+Además de lo que pedía el enunciado agregué:
 
 - Una página web en `/` para usar el CRUD y ver qué pod respondió cada petición, con un botón para probar el balanceo.
 - La documentación Swagger que genera FastAPI en `/docs`.
@@ -91,7 +91,7 @@ docker-compose.yml    Para correr la API sin Kubernetes
 
 - Docker
 - kubectl
-- Un clúster local. Nosotros usamos minikube, pero también funciona con el Kubernetes de Docker Desktop o con kind.
+- Un clúster local. Yo usé minikube, pero también funciona con el Kubernetes de Docker Desktop o con kind.
 
 En Mac se puede instalar todo con Homebrew:
 
@@ -180,7 +180,7 @@ Lo importante: `api-crud` con 2/2, `postgres` con 1/1 y el PVC en estado `Bound`
 
 ### 5. Entrar a la API
 
-El Service es tipo LoadBalancer. En un clúster local no hay un balanceador de verdad, así que la `EXTERNAL-IP` queda en `<pending>` hasta que hagamos alguno de estos pasos según el clúster:
+El Service es tipo LoadBalancer. En un clúster local no hay un balanceador de verdad, así que la `EXTERNAL-IP` queda en `<pending>` hasta que se haga alguno de estos pasos según el clúster:
 
 - **minikube:** en otra terminal correr `minikube tunnel` y dejarla abierta (puede pedir la contraseña del computador porque usa el puerto 80). La API queda en `http://127.0.0.1`.
 - **Docker Desktop:** no hay que hacer nada, queda en `http://localhost`.
@@ -197,7 +197,7 @@ Con eso ya se puede abrir en el navegador:
 
 ## Pruebas
 
-En los ejemplos usamos `http://127.0.0.1`; si su URL es otra, la cambian.
+En los ejemplos uso `http://127.0.0.1`; si la URL es otra, hay que cambiarla.
 
 ### CRUD
 
@@ -332,11 +332,11 @@ Un producto tiene esta forma:
 
 **Namespace (`00`).** Todo queda en el namespace `parcial2`, así se puede ver con `kubectl -n parcial2 get all` y borrar junto.
 
-**Secret (`01`).** Tiene el usuario, la contraseña y el nombre de la base de datos. PostgreSQL los recibe como `POSTGRES_USER`, `POSTGRES_PASSWORD` y `POSTGRES_DB`, y la API como `DB_USER`, `DB_PASSWORD` y `DB_NAME`. Usamos `stringData` para escribirlos en texto plano (Kubernetes los guarda en base64). Lo dejamos en el repo porque es un trabajo académico; en un proyecto real no se subiría.
+**Secret (`01`).** Tiene el usuario, la contraseña y el nombre de la base de datos. PostgreSQL los recibe como `POSTGRES_USER`, `POSTGRES_PASSWORD` y `POSTGRES_DB`, y la API como `DB_USER`, `DB_PASSWORD` y `DB_NAME`. Usé `stringData` para escribirlos en texto plano (Kubernetes los guarda en base64). Lo dejé en el repo porque es un trabajo académico; en un proyecto real no se subiría.
 
 **ConfigMap (`02`).** Configuración de la API que no es secreta. `DB_HOST` vale `postgres`, que es el nombre del Service de la base de datos.
 
-**PersistentVolume (`10`).** Es el almacenamiento. Usamos `hostPath`, que es una carpeta dentro del nodo (`/data/parcial2-postgres`), de 1Gi y con modo `ReadWriteOnce`. Le pusimos `Retain` para que los datos no se borren si alguien borra el PVC. `hostPath` sirve para clústeres de un solo nodo como minikube; en la nube se usaría un StorageClass que cree el disco automáticamente.
+**PersistentVolume (`10`).** Es el almacenamiento. Usé `hostPath`, que es una carpeta dentro del nodo (`/data/parcial2-postgres`), de 1Gi y con modo `ReadWriteOnce`. Le puse `Retain` para que los datos no se borren si alguien borra el PVC. `hostPath` sirve para clústeres de un solo nodo como minikube; en la nube se usaría un StorageClass que cree el disco automáticamente.
 
 **PersistentVolumeClaim (`11`).** Es la solicitud de almacenamiento que hace el pod de PostgreSQL: pide 1Gi, `ReadWriteOnce` y la clase `manual`. Kubernetes lo enlaza con el PV que cumpla esas condiciones. La idea de separar PV y PVC es que el Deployment no tenga que saber de dónde sale el disco.
 
@@ -374,7 +374,7 @@ Para **balancear la carga**, las escrituras tienen que ir al primario y las lect
 
 También existen bases de datos que escalan las escrituras, no solo las lecturas: multi-primario (Galera), sharding (Citus, Vitess) y bases de datos distribuidas como CockroachDB o YugabyteDB. El costo de replicar es el replication lag (una lectura en una réplica puede no ver todavía lo que se acaba de escribir) y lo que dicen los teoremas CAP y PACELC sobre consistencia, disponibilidad y latencia.
 
-Para este proyecto, lo que haríamos es instalar CloudNativePG, cambiar los manifiestos `10` a `13` por un recurso `Cluster` con 3 instancias (1 primario y 2 réplicas, una de ellas síncrona) y hacer que la API use `postgres-rw` para escribir y `postgres-ro` para leer:
+Para este proyecto, lo que haría es instalar CloudNativePG, cambiar los manifiestos `10` a `13` por un recurso `Cluster` con 3 instancias (1 primario y 2 réplicas, una de ellas síncrona) y hacer que la API use `postgres-rw` para escribir y `postgres-ro` para leer:
 
 ```mermaid
 flowchart LR
@@ -385,7 +385,7 @@ flowchart LR
     P -. WAL .-> R1 & R2
 ```
 
-Dejamos un ejemplo de cómo se vería en [`docs/ejemplos-no-implementados/`](docs/ejemplos-no-implementados/), pero no se aplica porque el punto pide solo investigar.
+Dejé un ejemplo de cómo se vería en [`docs/ejemplos-no-implementados/`](docs/ejemplos-no-implementados/), pero no se aplica porque el punto pide solo investigar.
 
 ## Problemas comunes
 
@@ -405,7 +405,6 @@ kubectl -n parcial2 logs -f -l app=api-crud --prefix
 kubectl -n parcial2 exec -it deploy/postgres -- psql -U parcial2 -d inventario -c "SELECT id, nombre, creado_por FROM productos;"
 ```
 
-## Integrantes
+## Autor
 
-- Juan Manuel Arango Bedoya ([@jArango82](https://github.com/jArango82))
-- (pendiente)
+Juan Manuel Arango Bedoya ([@jArango82](https://github.com/jArango82))

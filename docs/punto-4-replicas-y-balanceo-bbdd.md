@@ -271,7 +271,7 @@ postgresql://…mismos hosts…/inventario?target_session_attrs=prefer-standby&l
 
 ## 9. Propuesta para este proyecto
 
-Si tuviéramos que pasar del diagrama del parcial a una BBDD replicada, haríamos:
+Si tuviera que pasar del diagrama del parcial a una BBDD replicada, haría esto:
 
 1. Instalar el operator CloudNativePG en el clúster.
 2. Reemplazar `k8s/10…13` (PV, PVC, Deployment y Service de PostgreSQL) por un recurso `Cluster` con `instances: 3` → 1 primario + 2 réplicas, cada una con su propio PVC, con 1 réplica síncrona para no perder datos.
